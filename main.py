@@ -13,11 +13,6 @@ db_user = os.getenv('DB_USER')
 db_password = os.getenv('DB_PASSWORD')
 db_name = os.getenv('DB_NAME')
 
-print(db_host)
-print(db_user)
-print(db_password)
-print(db_name)
-
 conn = pymysql.connect(
     host=db_host,  # 데이터베이스 서버
     user=db_user,  # 사용자명
