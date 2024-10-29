@@ -1,64 +1,118 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from time import sleep
+import asyncio
+from pyppeteer import launch
+from bs4 import BeautifulSoup
+import time
+from datetime import datetime
+import os
 
-def scrape_page():
-    try:
-        chrome_options = Options()
-        chrome_options.add_argument('--headless')
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument('--disable-gpu')
-        chrome_options.add_argument('--window-size=1280,720')
-        chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-        
-        # 메모리 관련 옵션
-        chrome_options.add_argument('--aggressive-cache-discard')
-        chrome_options.add_argument('--disable-application-cache')
-        chrome_options.add_argument('--disable-cache')
-        chrome_options.add_argument('--disable-offline-load-stale-cache')
-        chrome_options.add_argument('--disk-cache-size=0')
-        chrome_options.add_argument('--media-cache-size=0')
-        
-        driver = webdriver.Chrome(options=chrome_options)
-        
-        url = "https://ev.or.kr/nportal/buySupprt/initSubsidyPaymentCheckAction.do"
-        print(f"Start loading page: {url}")
-        
-        driver.get(url)
-        sleep(5)  # 페이지 로딩 대기
-        
-        content = driver.page_source
-        print("Successfully retrieved page content")
-        
-        driver.quit()
-        return content
+async def setup_browser():
+   browser_args = [
+       '--no-sandbox',
+       '--disable-setuid-sandbox',
+       '--disable-dev-shm-usage',
+       '--disable-gpu',
+       '--disable-extensions',
+       '--disable-software-rasterizer',
+       '--disable-plugins', 
+       '--disable-default-apps',
+       '--disable-translate',
+       '--disable-features=TranslateUI',
+       '--disable-features=IsolateOrigins,site-per-process',
+       '--disable-blink-features=AutomationControlled',
+       '--disable-application-cache',
+       '--disable-sync',
+       '--no-first-run',
+       '--no-default-browser-check',
+       '--single-process',  # Important: Reduces memory usage
+       '--memory-pressure-off',
+       '--window-size=1280,720',
+       '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+   ]
+   
+   return await launch(
+       headless=True,
+       args=browser_args,
+       ignoreHTTPSErrors=True,
+       handleSIGINT=False,
+       handleSIGTERM=False,
+       handleSIGHUP=False,
+       executablePath='/usr/bin/chromium-browser',  # Chromium path for Lightsail
+       options={
+           'protocolTimeout': 240000,
+       }
+   )
 
-    except Exception as e:
-        print(f"Error occurred: {str(e)}")
-        raise
+async def scrape_page(retry_count=3):
+   browser = None
+   for attempt in range(retry_count):
+       try:
+           print(f"Attempt {attempt + 1}/{retry_count}")
+           
+           browser = await setup_browser()
+           page = await browser.newPage()
+           
+           # Memory usage optimization
+           await page.setRequestInterception(True)
+           
+           async def intercept(request):
+               if request.resourceType in ['image', 'stylesheet', 'font']:
+                   await request.abort()
+               else:
+                   await request.continue_()
+           
+           page.on('request', lambda req: asyncio.ensure_future(intercept(req)))
+           
+           url = "https://ev.or.kr/nportal/buySupprt/initSubsidyPaymentCheckAction.do"
+           print(f"Loading page: {url}")
+           
+           await page.goto(url, {
+               'waitUntil': 'networkidle0',
+               'timeout': 30000
+           })
+           
+           content = await page.content()
+           soup = BeautifulSoup(content, 'html.parser')
+           
+           timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+           filename = f'ev_content_{timestamp}.html'
+           
+           with open(filename, 'w', encoding='utf-8') as f:
+               f.write(str(soup.prettify()))
+           
+           print(f"Content saved to: {filename}")
+           print(soup.prettify())  # Print to console
+           
+           return True
 
-def main():
-    try:
-        for attempt in range(3):
-            try:
-                content = scrape_page()
-                print(content)
-                break
-            except Exception as e:
-                if attempt == 2:
-                    raise
-                print(f"Attempt {attempt + 1} failed, retrying...")
-                sleep(5)
-                
-    except Exception as e:
-        print(f"Main function error: {str(e)}")
-        raise
+       except Exception as e:
+           print(f"Error on attempt {attempt + 1}: {str(e)}")
+           if attempt < retry_count - 1:
+               print(f"Retrying in 5 seconds...")
+               await asyncio.sleep(5)
+           
+       finally:
+           try:
+               if browser:
+                   await browser.close()
+           except Exception as e:
+               print(f"Error closing browser: {str(e)}")
+
+async def main():
+   try:
+       success = await scrape_page()
+       
+       if success:
+           print("Scraping completed successfully")
+       else:
+           print("All attempts failed")
+           
+   except Exception as e:
+       print(f"Main function error: {str(e)}")
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("Program interrupted by user")
-    except Exception as e:
-        print(f"Unexpected error occurred: {str(e)}")
+   # System memory optimization
+   os.system('sync; echo 1 > /proc/sys/vm/drop_caches')
+   
+   loop = asyncio.get_event_loop()
+   loop.run_until_complete(main())
+   loop.close()
