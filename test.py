@@ -6,21 +6,17 @@ from pyppeteer import launch
 
 async def main():
     # headless=False로 설정하여 브라우저 창을 실제로 띄움
-    browser = await launch(headless=False, args=['--window-size=375,812'])
+    browser = await launch(
+        headless=False,
+        args=[
+            '--window-size=375,812',
+            '--no-sandbox',  # sandbox 비활성화
+            '--disable-setuid-sandbox',  # setuid sandbox 비활성화
+            '--disable-dev-shm-usage'  # shared memory 사용 비활성화
+        ],
+        ignoreHTTPSErrors=True
+    )
     page = await browser.newPage()
-
-    # iPhone X 프로파일로 에뮬레이션 설정
-    await page.emulate({
-        'name': 'iPhone X',
-        'viewport': {
-            'width': 375,
-            'height': 812,
-            'deviceScaleFactor': 3,
-            'isMobile': True,
-            'hasTouch': True,
-        },
-        'userAgent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1'
-    })
 
     url = "https://ev.or.kr/nportal/buySupprt/initSubsidyPaymentCheckAction.do"
     await page.goto(url)
@@ -38,5 +34,5 @@ async def main():
     # print(tr)
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+if __name__ == '__main__':
+    asyncio.get_event_loop().run_until_complete(main())
