@@ -8,6 +8,7 @@ import subprocess
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 async def get_chrome_path():
     try:
         # which 명령어로 chromium-browser 경로 찾기
@@ -25,6 +26,7 @@ async def get_chrome_path():
                 return chrome_path
             except:
                 return None
+
 
 async def main():
     try:
@@ -55,7 +57,7 @@ async def main():
 
         page = await browser.newPage()
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-        
+
         await page.setViewport({'width': 1920, 'height': 1080})
         await page.setDefaultNavigationTimeout(60000)
 
@@ -87,21 +89,21 @@ if __name__ == '__main__':
     # 필요한 패키지 설치 확인
     try:
         subprocess.run(['apt-get', 'update'], check=True)
-        subprocess.run(['apt-get', 'install', '-y', 
+        subprocess.run(['apt-get', 'install', '-y',
                        'chromium-browser',
-                       'libnss3',
-                       'libgbm1',
-                       'libxshmfence1',
-                       'libatk1.0-0',
-                       'libatk-bridge2.0-0',
-                       'libcups2',
-                       'libdrm2',
-                       'libxcomposite1',
-                       'libxdamage1',
-                       'libxfixes3',
-                       'libxrandr2',
-                       'libgbm1',
-                       'libasound2'], check=True)
+                        'libnss3',
+                        'libgbm1',
+                        'libxshmfence1',
+                        'libatk1.0-0',
+                        'libatk-bridge2.0-0',
+                        'libcups2',
+                        'libdrm2',
+                        'libxcomposite1',
+                        'libxdamage1',
+                        'libxfixes3',
+                        'libxrandr2',
+                        'libgbm1',
+                        'libasound2'], check=True)
     except subprocess.CalledProcessError as e:
         logger.error(f"패키지 설치 중 오류 발생: {str(e)}")
         logger.info("sudo 권한으로 실행해주세요.")
