@@ -67,9 +67,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    try:
-        asyncio.get_event_loop().run_until_complete(main())
-    except KeyboardInterrupt:
-        logger.info("프로그램이 사용자에 의해 중단되었습니다.")
-    except Exception as e:
-        logger.error(f"예상치 못한 에러 발생: {str(e)}")
+    asyncio.get_event_loop().run_until_complete(main())
