@@ -1,103 +1,55 @@
 import asyncio
-from pyppeteer import launch
+from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
-import time
 from datetime import datetime
-import os
 
-async def setup_browser():
-   browser_args = [
-       '--no-sandbox',
-       '--disable-setuid-sandbox',
-       '--disable-dev-shm-usage',
-       '--disable-gpu',
-       '--disable-extensions',
-       '--disable-software-rasterizer',
-       '--disable-plugins', 
-       '--disable-default-apps',
-       '--disable-translate',
-       '--disable-features=TranslateUI',
-       '--disable-features=IsolateOrigins,site-per-process',
-       '--disable-blink-features=AutomationControlled',
-       '--disable-application-cache',
-       '--disable-sync',
-       '--no-first-run',
-       '--no-default-browser-check',
-       '--single-process',
-       '--memory-pressure-off',
-       '--window-size=1280,720',
-       '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-   ]
-   
-   return await launch(
-       headless=True,
-       args=browser_args,
-       ignoreHTTPSErrors=True,
-       handleSIGINT=False,
-       handleSIGTERM=False,
-       handleSIGHUP=False,
-       executablePath='/usr/bin/chromium-browser',
-       options={
-           'protocolTimeout': 240000,
-       }
-   )
 
-async def scrape_page(retry_count=3):
-   browser = None
-   for attempt in range(retry_count):
-       print(f"Attempt {attempt + 1}/{retry_count}")
-       
-       browser = await setup_browser()
-       page = await browser.newPage()
-       
-       await page.setRequestInterception(True)
-       
-       async def intercept(request):
-           if request.resourceType in ['image', 'stylesheet', 'font']:
-               await request.abort()
-           else:
-               await request.continue_()
-       
-       page.on('request', lambda req: asyncio.ensure_future(intercept(req)))
-       
-       url = "https://ev.or.kr/nportal/buySupprt/initSubsidyPaymentCheckAction.do"
-       print(f"Loading page: {url}")
-       
-       await page.goto(url, {
-           'waitUntil': 'networkidle0',
-           'timeout': 30000
-       })
-       
-       content = await page.content()
-       soup = BeautifulSoup(content, 'html.parser')
-       
-       timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-       filename = f'ev_content_{timestamp}.html'
-       
-       with open(filename, 'w', encoding='utf-8') as f:
-           f.write(str(soup.prettify()))
-       
-       print(f"Content saved to: {filename}")
-       print(soup.prettify())
-       
-       if browser:
-           await browser.close()
-           
-       return True
+async def scrape_page():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True, args=[
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-software-rasterizer',
+            '--disable-extensions',
+            '--window-size=1280,720',
+            '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ])
 
-       if attempt < retry_count - 1:
-           print(f"Retrying in 5 seconds...")
-           await asyncio.sleep(5)
+        # 여기서는 async with가 아닌, 일반 await 구문으로 페이지를 생성합니다.
+        page = await browser.new_page()
+
+        # 요청 차단을 위한 함수 설정 (이미지, 스타일시트, 폰트 등)
+        async def intercept(route, request):
+            if request.resource_type in ['image', 'stylesheet', 'font']:
+                await route.abort()
+            else:
+                await route.continue_()
+
+        await page.route("**/*", intercept)
+
+        url = "https://ev.or.kr/nportal/buySupprt/initSubsidyPaymentCheckAction.do"
+        print(f"Loading page: {url}")
+
+        await page.goto(url, wait_until='networkidle', timeout=30000)
+
+        content = await page.content()
+        soup = BeautifulSoup(content, 'html.parser')
+        print(soup)
+
+        # 브라우저 종료
+        await browser.close()
+
+    return True
+
 
 async def main():
-   success = await scrape_page()
-   
-   if success:
-       print("Scraping completed successfully")
-   else:
-       print("All attempts failed")
+    success = await scrape_page()
+    if success:
+        print("Scraping completed successfully")
+    else:
+        print("Scraping failed")
 
 if __name__ == "__main__":
-   os.system('sync; echo 1 > /proc/sys/vm/drop_caches')
-   
-   asyncio.run(main())
+    asyncio.run(main())
