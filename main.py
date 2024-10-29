@@ -75,7 +75,6 @@ def main():
         str_now = now.strftime("%Y-%m-%d %H:%M:%S")
         obj['created'] = str_now
 
-        # print(obj)
 
         # 데이터가 있는지 체크
         with conn.cursor() as cursor:
