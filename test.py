@@ -23,7 +23,7 @@ async def setup_browser():
        '--disable-sync',
        '--no-first-run',
        '--no-default-browser-check',
-       '--single-process',  # Important: Reduces memory usage
+       '--single-process',
        '--memory-pressure-off',
        '--window-size=1280,720',
        '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -36,7 +36,7 @@ async def setup_browser():
        handleSIGINT=False,
        handleSIGTERM=False,
        handleSIGHUP=False,
-       executablePath='/usr/bin/chromium-browser',  # Chromium path for Lightsail
+       executablePath='/usr/bin/chromium-browser',
        options={
            'protocolTimeout': 240000,
        }
@@ -45,72 +45,59 @@ async def setup_browser():
 async def scrape_page(retry_count=3):
    browser = None
    for attempt in range(retry_count):
-       try:
-           print(f"Attempt {attempt + 1}/{retry_count}")
+       print(f"Attempt {attempt + 1}/{retry_count}")
+       
+       browser = await setup_browser()
+       page = await browser.newPage()
+       
+       await page.setRequestInterception(True)
+       
+       async def intercept(request):
+           if request.resourceType in ['image', 'stylesheet', 'font']:
+               await request.abort()
+           else:
+               await request.continue_()
+       
+       page.on('request', lambda req: asyncio.ensure_future(intercept(req)))
+       
+       url = "https://ev.or.kr/nportal/buySupprt/initSubsidyPaymentCheckAction.do"
+       print(f"Loading page: {url}")
+       
+       await page.goto(url, {
+           'waitUntil': 'networkidle0',
+           'timeout': 30000
+       })
+       
+       content = await page.content()
+       soup = BeautifulSoup(content, 'html.parser')
+       
+       timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+       filename = f'ev_content_{timestamp}.html'
+       
+       with open(filename, 'w', encoding='utf-8') as f:
+           f.write(str(soup.prettify()))
+       
+       print(f"Content saved to: {filename}")
+       print(soup.prettify())
+       
+       if browser:
+           await browser.close()
            
-           browser = await setup_browser()
-           page = await browser.newPage()
-           
-           # Memory usage optimization
-           await page.setRequestInterception(True)
-           
-           async def intercept(request):
-               if request.resourceType in ['image', 'stylesheet', 'font']:
-                   await request.abort()
-               else:
-                   await request.continue_()
-           
-           page.on('request', lambda req: asyncio.ensure_future(intercept(req)))
-           
-           url = "https://ev.or.kr/nportal/buySupprt/initSubsidyPaymentCheckAction.do"
-           print(f"Loading page: {url}")
-           
-           await page.goto(url, {
-               'waitUntil': 'networkidle0',
-               'timeout': 30000
-           })
-           
-           content = await page.content()
-           soup = BeautifulSoup(content, 'html.parser')
-           
-           timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-           filename = f'ev_content_{timestamp}.html'
-           
-           with open(filename, 'w', encoding='utf-8') as f:
-               f.write(str(soup.prettify()))
-           
-           print(f"Content saved to: {filename}")
-           print(soup.prettify())  # Print to console
-           
-           return True
+       return True
 
-       except Exception as e:
-           print(f"Error on attempt {attempt + 1}: {str(e)}")
-           if attempt < retry_count - 1:
-               print(f"Retrying in 5 seconds...")
-               await asyncio.sleep(5)
-           
-       finally:
-           try:
-               if browser:
-                   await browser.close()
-           except Exception as e:
-               print(f"Error closing browser: {str(e)}")
+       if attempt < retry_count - 1:
+           print(f"Retrying in 5 seconds...")
+           await asyncio.sleep(5)
 
 async def main():
-   try:
-       success = await scrape_page()
-       
-       if success:
-           print("Scraping completed successfully")
-       else:
-           print("All attempts failed")
-           
-   except Exception as e:
-       print(f"Main function error: {str(e)}")
+   success = await scrape_page()
+   
+   if success:
+       print("Scraping completed successfully")
+   else:
+       print("All attempts failed")
 
 if __name__ == "__main__":
-   # System memory optimization
    os.system('sync; echo 1 > /proc/sys/vm/drop_caches')
    
    loop = asyncio.get_event_loop()
