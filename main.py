@@ -1,11 +1,10 @@
 import pymysql
-import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 from dotenv import load_dotenv
 import os
-from pyppeteer import launch
 import asyncio
+from playwright.async_api import async_playwright
 
 load_dotenv()
 
@@ -27,79 +26,49 @@ conn = pymysql.connect(
 codes = []
 
 
-async def setup_browser():
-    browser_args = [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-extensions',
-        '--disable-software-rasterizer',
-        '--disable-plugins',
-        '--disable-default-apps',
-        '--disable-translate',
-        '--disable-features=TranslateUI',
-        '--disable-features=IsolateOrigins,site-per-process',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-application-cache',
-        '--disable-sync',
-        '--no-first-run',
-        '--no-default-browser-check',
-        '--single-process',
-        '--memory-pressure-off',
-        '--window-size=1280,720',
-        '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ]
-
-    return await launch(
-        headless=True,
-        args=browser_args,
-        ignoreHTTPSErrors=True,
-        handleSIGINT=False,
-        handleSIGTERM=False,
-        handleSIGHUP=False,
-        #    executablePath='/usr/bin/chromium-browser',
-        options={
-            'protocolTimeout': 240000,
-        }
-    )
-
-
 async def main():
     global codes
-    # headers = {
-    #     "Content-Type": "application/json;charset=UTF-8",
-    #     "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1",
-    # }
-    # url = "https://ev.or.kr/nportal/buySupprt/initSubsidyPaymentCheckAction.do"
-    # response = requests.get(url, headers=headers)
-    # soup = BeautifulSoup(response.text, 'html.parser')
 
-    browser = await setup_browser()
-    page = await browser.newPage()
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True, args=[
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-software-rasterizer',
+            '--disable-extensions',
+            '--window-size=1280,720',
+            '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ])
 
-    await page.setRequestInterception(True)
+        # 여기서는 async with가 아닌, 일반 await 구문으로 페이지를 생성합니다.
+        page = await browser.new_page()
 
-    async def intercept(request):
-        if request.resourceType in ['image', 'stylesheet', 'font']:
-            await request.abort()
-        else:
-            await request.continue_()
+        # 요청 차단을 위한 함수 설정 (이미지, 스타일시트, 폰트 등)
+        async def intercept(route, request):
+            if request.resource_type in ['image', 'stylesheet', 'font']:
+                await route.abort()
+            else:
+                await route.continue_()
 
-    page.on('request', lambda req: asyncio.ensure_future(intercept(req)))
+        await page.route("**/*", intercept)
 
-    url = "https://ev.or.kr/nportal/buySupprt/initSubsidyPaymentCheckAction.do"
-    print(f"Loading page: {url}")
+        url = "https://ev.or.kr/nportal/buySupprt/initSubsidyPaymentCheckAction.do"
+        print(f"Loading page: {url}")
 
-    await page.goto(url, {
-        'waitUntil': 'networkidle0',
-        'timeout': 30000
-    })
+        await page.goto(url, wait_until='networkidle', timeout=30000)
 
-    content = await page.content()
+        content = await page.content()
+        soup = BeautifulSoup(content, 'html.parser')
+        print(soup)
 
-    await browser.close()
+        # 브라우저 종료
+        await browser.close()
 
+        parsing(content)
+
+
+def parsing(content):
     soup = BeautifulSoup(content, 'html.parser')
 
     trs = soup.select("#editForm > div.contentList.fz13 > table > tbody > tr")
