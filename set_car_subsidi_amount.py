@@ -4,6 +4,9 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import os
 from datetime import datetime
+import asyncio
+from pyppeteer import launch
+from urllib.parse import urlencode  # 이 import 추가
 
 load_dotenv()
 
@@ -26,7 +29,7 @@ conn = pymysql.connect(
 codes = []
 
 
-def main():
+async def main():
     global codes
     getCodes()
 
@@ -36,38 +39,80 @@ def main():
         cursor.execute(sql)
         conn.commit()
 
+    # 브라우저 한 번만 실행
+    browser = await launch(
+        headless=True,
+        args=[
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage'
+        ],
+        ignoreHTTPSErrors=True
+    )
+
     query = ""
 
-    for index, obj in enumerate(codes):
-        # 배열 합치기!
-        list = crawling(2024, obj['code1'])
-        arr = [tuple(item.values()) for item in list]
-        
-        if query == "":
-            query, v = createQuery(list[0])
+    try:
+        for index, obj in enumerate(codes):
+            # 배열 합치기!
+            list = await crawling(browser, 2024, obj['code1'])
+            arr = [tuple(item.values()) for item in list]
 
-        with conn.cursor() as cursor:
-            # 한방에 입력!
-            print(index, '. 총 행갯수:', len(arr))
-            sql = f"INSERT INTO EV_SUBSIDI_AMOUNT_tbl SET {query}"
-            cursor.executemany(sql, arr)
-            conn.commit()
-            cursor.close()
+            if query == "":
+                query, v = createQuery(list[0])
+
+            with conn.cursor() as cursor:
+                # 한방에 입력!
+                print(index, '/', len(codes))
+                print('총 자동차 갯수:', len(arr))
+                sql = f"INSERT INTO EV_SUBSIDI_AMOUNT_tbl SET {query}"
+                cursor.executemany(sql, arr)
+                conn.commit()
+                cursor.close()
+
+            # 선택적: 요청 간 딜레이 추가
+            await asyncio.sleep(1)
+    finally:
+        # 모든 작업이 끝난 후 브라우저 종료
+        await browser.close()
 
 
-def crawling(year, code1):
+async def crawling(browser, year, code1):
     print(code1)
-    headers = {
-        'Content-Type': 'application/x-www-form-urlencoded'
-    }
+    # headers = {
+    #     'Content-Type': 'application/x-www-form-urlencoded'
+    # }
+    # url = "https://ev.or.kr/nportal/buySupprt/psPopupLocalCarModelPrice.do"
+    # payload = f"year={year}&local_cd={code1}&car_type=11"
+    # response = requests.request('POST', url, headers=headers, data=payload)
+    # soup = BeautifulSoup(response.text, 'html.parser')
+
     url = "https://ev.or.kr/nportal/buySupprt/psPopupLocalCarModelPrice.do"
-    payload = f"year={year}&local_cd={code1}&car_type=11"
-    response = requests.request('POST', url, headers=headers, data=payload)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    page = await browser.newPage()
+
+    # Form HTML 생성
+    form_html = f'''
+        <form id="postForm" action="{url}" method="POST">
+            <input type="hidden" name="year" value="{year}">
+            <input type="hidden" name="local_cd" value="{code1}">
+            <input type="hidden" name="car_type" value="11">
+        </form>
+        <script>
+            document.getElementById('postForm').submit();
+        </script>
+    '''
+
+    await page.setContent(form_html)
+    await page.waitForNavigation()
+
+    content = await page.content()
+
+    # 페이지만 닫고 브라우저는 유지
+    await page.close()
+
+    soup = BeautifulSoup(content, 'html.parser')
     trs = soup.select("tbody > tr")
-
     arr = []
-
     for tr in trs:
         obj = {}
         tds = tr.find_all('td')
@@ -106,4 +151,4 @@ def getCodes():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.get_event_loop().run_until_complete(main())

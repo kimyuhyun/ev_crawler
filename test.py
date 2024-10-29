@@ -1,18 +1,16 @@
 from datetime import datetime
-import asyncio
 from bs4 import BeautifulSoup
+import asyncio
 from pyppeteer import launch
 
 
 async def main():
-    # headless=False로 설정하여 브라우저 창을 실제로 띄움
     browser = await launch(
-        headless=False,
+        headless=True,
         args=[
-            '--window-size=375,812',
-            '--no-sandbox',  # sandbox 비활성화
-            '--disable-setuid-sandbox',  # setuid sandbox 비활성화
-            '--disable-dev-shm-usage'  # shared memory 사용 비활성화
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage'
         ],
         ignoreHTTPSErrors=True
     )
