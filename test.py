@@ -44,9 +44,9 @@ if __name__ == '__main__':
     # Firefox와 geckodriver 설치
     try:
         import subprocess
-        subprocess.run(['apt-get', 'update'], check=True)
-        subprocess.run(['apt-get', 'install', '-y', 'firefox-esr'], check=True)
-        subprocess.run(['apt-get', 'install', '-y', 'firefox-geckodriver'], check=True)
+        subprocess.run(['sudo apt-get', 'update'], check=True)
+        subprocess.run(['sudo apt-get', 'install', '-y', 'firefox-esr'], check=True)
+        subprocess.run(['sudo apt-get', 'install', '-y', 'firefox-geckodriver'], check=True)
     except:
         logger.warning("패키지 설치 실패. 이미 설치되어 있거나 권한이 없을 수 있습니다.")
     
