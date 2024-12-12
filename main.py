@@ -76,6 +76,8 @@ def parsing(content):
     today = datetime.today()
     formatted_today = today.strftime('%Y-%m-%d')
 
+    print(trs)
+
     getCodes()
 
     for tr in trs:
@@ -144,9 +146,13 @@ def parsing(content):
 
 
 def getVehicleCount(td, seq):
-    tmp = td.get_text(separator=' ', strip=True)
-    tmp = tmp.split()[seq].strip('()')
-    return tmp
+    try:
+        tmp = td.get_text(separator=' ', strip=True)
+        tmp = tmp.split()[seq].strip('()')
+        return tmp
+    except Exception as e:
+        print(e)
+        return 0
 
 
 def findCode1(region, si):
